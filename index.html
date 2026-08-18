@@ -1,616 +1,639 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VéloRoute - Générateur d'Itinéraires</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Leaflet CSS & JS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <!-- FontAwesome icons -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- Chart.js for elevation profile -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        #map { height: 100%; min-height: 400px; width: 100%; border-radius: 0.75rem; }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calculateur d'Allure & Temps de Course</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React & ReactDOM CDN -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <!-- Babel standalone for JSX -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Outfit', sans-serif;
+    }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #ea580c;
+    }
+  </style>
 </head>
-<body class="bg-slate-900 text-slate-100 font-sans min-h-screen flex flex-col">
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  <div id="root"></div>
 
-    <!-- Header -->
-    <header class="bg-slate-800 border-b border-slate-700 p-4 shadow-md">
-        <div class="max-w-7xl mx-auto flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-                <div class="bg-emerald-500 text-slate-900 p-2.5 rounded-xl font-black text-xl shadow-lg">
-                    <i class="fa-solid fa-person-biking"></i>
-                </div>
-                <div>
-                    <h1 class="text-xl font-bold tracking-wide text-white">VéloRoute <span class="text-emerald-400">Pro</span></h1>
-                    <p class="text-xs text-slate-400">Générateur & Exportateur d'itinéraires cyclistes</p>
-                </div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // Distances standards en km
+    const DISTANCES = [
+      { id: '100m', name: '100m', km: 0.1, icon: 'fa-bolt' },
+      { id: '400m', name: '400m', km: 0.4, icon: 'fa-stopwatch' },
+      { id: '1k', name: '1 km', km: 1, icon: 'fa-person-running' },
+      { id: '5k', name: '5 km', km: 5, icon: 'fa-fire' },
+      { id: '10k', name: '10 km', km: 10, icon: 'fa-medal' },
+      { id: 'semi', name: 'Semi-Marathon', km: 21.0975, icon: 'fa-trophy', highlight: true },
+      { id: 'marathon', name: 'Marathon', km: 42.195, icon: 'fa-crown' },
+    ];
+
+    function FormatTime({ totalSeconds, showSubSec = false }) {
+      if (isNaN(totalSeconds) || totalSeconds <= 0) return <span>--:--</span>;
+      
+      const hrs = Math.floor(totalSeconds / 3600);
+      const mins = Math.floor((totalSeconds % 3600) / 60);
+      const secs = Math.floor(totalSeconds % 60);
+      const subSec = Math.round((totalSeconds % 1) * 10);
+
+      if (hrs > 0) {
+        return (
+          <span className="font-mono">
+            <strong className="text-xl sm:text-2xl font-bold">{hrs}</strong>
+            <span className="text-xs text-slate-400 mr-1">h</span>
+            <strong className="text-xl sm:text-2xl font-bold">{String(mins).padStart(2, '0')}</strong>
+            <span className="text-xs text-slate-400 mr-1">m</span>
+            <strong className="text-xl sm:text-2xl font-bold">{String(secs).padStart(2, '0')}</strong>
+            <span className="text-xs text-slate-400">s</span>
+          </span>
+        );
+      }
+
+      return (
+        <span className="font-mono">
+          <strong className="text-xl sm:text-2xl font-bold">{mins}</strong>
+          <span className="text-xs text-slate-400 mr-1">m</span>
+          <strong className="text-xl sm:text-2xl font-bold">{String(secs).padStart(2, '0')}</strong>
+          {showSubSec && (
+            <span className="text-sm text-amber-400 font-semibold">.{subSec}</span>
+          )}
+          <span className="text-xs text-slate-400 ml-0.5">s</span>
+        </span>
+      );
+    }
+
+    function App() {
+      // Base state: speed in km/h
+      const [speedKmh, setSpeedKmh] = useState(12.0); // Default 12 km/h = 5:00 min/km
+      const [customDist, setCustomDist] = useState(15);
+      const [activeTab, setActiveTab] = useState('converter'); // 'converter', 'splits', 'zones'
+      const [splitDistance, setSplitDistance] = useState('semi'); // default split focus on semi
+
+      // Calculated variables derived from speed
+      const paceSecondsPerKm = speedKmh > 0 ? 3600 / speedKmh : 0;
+      const time100mSec = speedKmh > 0 ? 360 / speedKmh : 0;
+
+      // Handlers for direct inputs
+      const handleSpeedChange = (val) => {
+        const num = parseFloat(val);
+        if (!isNaN(num) && num > 0) {
+          setSpeedKmh(Math.min(Math.max(num, 3), 35));
+        }
+      };
+
+      const handlePaceChange = (mins, secs) => {
+        const m = parseInt(mins) || 0;
+        const s = parseInt(secs) || 0;
+        const totalSecs = m * 60 + s;
+        if (totalSecs > 0) {
+          const newSpeed = 3600 / totalSecs;
+          setSpeedKmh(Math.min(Math.max(newSpeed, 3), 35));
+        }
+      };
+
+      const handle100mChange = (secs) => {
+        const s = parseFloat(secs);
+        if (!isNaN(s) && s > 0) {
+          const newSpeed = 360 / s;
+          setSpeedKmh(Math.min(Math.max(newSpeed, 3), 35));
+        }
+      };
+
+      const handleRaceTimeChange = (distKm, hrsInput, minsInput, secsInput) => {
+        const h = parseInt(hrsInput) || 0;
+        const m = parseInt(minsInput) || 0;
+        const s = parseInt(secsInput) || 0;
+        const totalSeconds = h * 3600 + m * 60 + s;
+        if (totalSeconds > 0 && distKm > 0) {
+          const paceSec = totalSeconds / distKm;
+          const newSpeed = 3600 / paceSec;
+          setSpeedKmh(Math.min(Math.max(newSpeed, 3), 35));
+        }
+      };
+
+      // Current min/km values for input bindings
+      const currentPaceMins = Math.floor(paceSecondsPerKm / 60);
+      const currentPaceSecs = Math.round(paceSecondsPerKm % 60);
+
+      // Selected split target distance
+      const getSplitTarget = () => {
+        if (splitDistance === 'semi') return { name: 'Semi-Marathon', km: 21.0975 };
+        if (splitDistance === 'marathon') return { name: 'Marathon', km: 42.195 };
+        if (splitDistance === '10k') return { name: '10 km', km: 10 };
+        return { name: `Personnalisé (${customDist} km)`, km: parseFloat(customDist) || 10 };
+      };
+
+      return (
+        <div className="max-w-6xl mx-auto px-4 py-6 sm:py-10">
+          
+          {/* Header */}
+          <header className="text-center mb-8 sm:mb-12">
+            <div className="inline-flex items-center gap-2 bg-gradient-to-r from-orange-500/10 to-amber-500/10 border border-orange-500/20 px-4 py-1.5 rounded-full text-orange-400 text-xs sm:text-sm font-medium mb-3">
+              <i className="fa-solid fa-person-running text-orange-500"></i>
+              Calculateur & Convertisseur d'Allures
             </div>
-            <div class="text-xs bg-slate-700/50 border border-slate-600 px-3 py-1.5 rounded-full text-slate-300 hidden sm:flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                Localisation GPS Active
-            </div>
-        </div>
-    </header>
+            <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-white mb-2">
+              Vitesse, Allure & Temps au <span className="bg-gradient-to-r from-orange-400 to-amber-300 bg-clip-text text-transparent">Semi-Marathon</span>
+            </h1>
+            <p className="text-slate-400 text-sm sm:text-base max-w-2xl mx-auto">
+              Convertissez instantanément vos km/h en min/km, temps au 100m, et estimez vos chronos du 5k au marathon.
+            </p>
+          </header>
 
-    <!-- App Container -->
-    <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-        <!-- Controls & Routes List Sidebar -->
-        <div class="lg:col-span-5 flex flex-col space-y-6">
+          {/* Main Speed Control Slider Card */}
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl mb-8 relative overflow-hidden">
+            <div className="absolute -right-12 -top-12 w-48 h-48 bg-orange-500/10 rounded-full blur-3xl pointer-events-none"></div>
             
-            <!-- Distance & Generator Panel -->
-            <div class="bg-slate-800 rounded-2xl p-5 border border-slate-700 shadow-xl">
-                <h2 class="text-lg font-semibold mb-4 flex items-center text-white">
-                    <i class="fa-solid fa-sliders text-emerald-400 mr-2"></i> Configuration du parcours
-                </h2>
-                
-                <form id="generator-form" onsubmit="event.preventDefault(); generateRoutes();" class="space-y-4">
-                    <div>
-                        <div class="flex justify-between items-center mb-1">
-                            <label for="distance" class="text-sm font-medium text-slate-300">Distance souhaitée (km)</label>
-                            <span id="distance-val" class="text-lg font-bold text-emerald-400">50 km</span>
-                        </div>
-                        <input type="range" id="distance" min="10" max="200" value="50" step="5"
-                            class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                            oninput="document.getElementById('distance-val').innerText = this.value + ' km'">
-                        <div class="flex justify-between text-xs text-slate-500 mt-1">
-                            <span>10 km</span>
-                            <span>100 km</span>
-                            <span>200 km</span>
-                        </div>
-                    </div>
-
-                    <div class="space-y-3 pt-2">
-                        <div>
-                            <label class="block text-xs font-medium text-slate-400 mb-1">Type de route</label>
-                            <select id="surface-type" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500">
-                                <option value="road">Route (Asphalte)</option>
-                                <option value="gravel">Gravel / Mixte</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label class="block text-xs font-medium text-slate-400 mb-1">Point de départ</label>
-                            <div class="flex gap-2 mb-1.5">
-                                <div class="relative flex-1">
-                                    <input type="text" id="start-address" placeholder="Ville, adresse, code postal..." 
-                                        onkeydown="if(event.key === 'Enter'){ event.preventDefault(); searchStartLocation(); }"
-                                        class="w-full bg-slate-700 border border-slate-600 rounded-lg pl-8 pr-3 py-2 text-sm text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500">
-                                    <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-slate-400 text-xs"></i>
-                                </div>
-                                <button type="button" onclick="searchStartLocation()" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-3 py-2 rounded-lg font-medium transition flex items-center gap-1 shadow">
-                                    Chercher
-                                </button>
-                                <button type="button" onclick="getCurrentLocation()" title="Utiliser ma position GPS" class="bg-slate-700 hover:bg-slate-600 border border-slate-600 text-emerald-400 px-3 py-2 rounded-lg transition">
-                                    <i class="fa-solid fa-location-crosshairs text-base"></i>
-                                </button>
-                            </div>
-                            <p class="text-[11px] text-slate-400 flex items-center gap-1">
-                                <i class="fa-solid fa-circle-info text-emerald-400"></i>
-                                <span id="start-location-label" class="truncate font-medium text-slate-300">Départ : Paris</span>
-                            </p>
-                            <p class="text-[10px] text-slate-500 mt-0.5"> Astuce : Cliquez directement n'importe où sur la carte pour définir le départ.</p>
-                        </div>
-                    </div>
-
-                    <button type="submit" class="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-3 px-4 rounded-xl shadow-lg transition flex items-center justify-center gap-2">
-                        <i class="fa-solid fa-wand-magic-sparkles"></i> Générer 5 Itinéraires
-                    </button>
-                </form>
-            </div>
-
-            <!-- List of 5 Generated Routes -->
-            <div class="bg-slate-800 rounded-2xl p-5 border border-slate-700 shadow-xl flex-1 flex flex-col min-h-[350px]">
-                <h2 class="text-lg font-semibold mb-3 flex items-center justify-between text-white">
-                    <span><i class="fa-solid fa-route text-emerald-400 mr-2"></i> Itinéraires Proposés</span>
-                    <span id="route-count" class="text-xs bg-slate-700 text-slate-300 px-2.5 py-1 rounded-full">0/5</span>
-                </h2>
-
-                <div id="routes-container" class="space-y-3 overflow-y-auto max-h-[420px] pr-1 custom-scrollbar flex-1">
-                    <!-- Placeholder message -->
-                    <div id="routes-placeholder" class="text-center py-12 text-slate-500 flex flex-col items-center justify-center h-full">
-                        <i class="fa-solid fa-compass-drafting text-4xl mb-3 text-slate-600"></i>
-                        <p class="text-sm">Définissez une distance et cliquez sur "Générer" pour obtenir 5 boucles personnalisées.</p>
-                    </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+              
+              {/* Vitesse km/h */}
+              <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-5 text-center relative group focus-within:border-orange-500 transition">
+                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                  Vitesse (km/h)
+                </label>
+                <div className="flex items-center justify-center gap-1">
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="3"
+                    max="35"
+                    value={parseFloat(speedKmh.toFixed(1))}
+                    onChange={(e) => handleSpeedChange(e.target.value)}
+                    className="w-28 text-center text-4xl sm:text-5xl font-black bg-transparent text-orange-400 focus:outline-none"
+                  />
+                  <span className="text-slate-500 font-medium text-lg self-end pb-2">km/h</span>
                 </div>
-            </div>
+              </div>
 
-        </div>
-
-        <!-- Visualization Map & Export Panel -->
-        <div class="lg:col-span-7 flex flex-col space-y-6">
-            
-            <!-- Map Container -->
-            <div class="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-xl flex flex-col h-[450px]">
-                <div class="flex justify-between items-center mb-3">
-                    <h2 class="text-md font-semibold text-white flex items-center">
-                        <i class="fa-solid fa-map-location-dot text-emerald-400 mr-2"></i> Aperçu Carte
-                    </h2>
-                    <span id="selected-route-name" class="text-xs font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-3 py-1 rounded-full">
-                        Aucun itinéraire sélectionné
-                    </span>
+              {/* Allure min/km */}
+              <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-5 text-center relative focus-within:border-amber-500 transition">
+                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                  Allure (min / km)
+                </label>
+                <div className="flex items-center justify-center gap-1 text-3xl sm:text-4xl font-black text-amber-400">
+                  <input
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={currentPaceMins}
+                    onChange={(e) => handlePaceChange(e.target.value, currentPaceSecs)}
+                    className="w-14 text-center bg-transparent focus:outline-none focus:ring-1 focus:ring-amber-500/50 rounded"
+                  />
+                  <span className="text-slate-500 text-2xl">:</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="59"
+                    value={String(currentPaceSecs).padStart(2, '0')}
+                    onChange={(e) => handlePaceChange(currentPaceMins, e.target.value)}
+                    className="w-16 text-center bg-transparent focus:outline-none focus:ring-1 focus:ring-amber-500/50 rounded"
+                  />
+                  <span className="text-slate-500 font-medium text-base self-end pb-1 ml-1">/km</span>
                 </div>
-                <div id="map" class="z-10 flex-1"></div>
+              </div>
+
+              {/* Temps au 100m */}
+              <div className="bg-slate-950/80 border border-slate-800 rounded-2xl p-5 text-center relative focus-within:border-emerald-500 transition">
+                <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                  Temps au 100m
+                </label>
+                <div className="flex items-center justify-center gap-1">
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={parseFloat(time100mSec.toFixed(1))}
+                    onChange={(e) => handle100mChange(e.target.value)}
+                    className="w-28 text-center text-3xl sm:text-4xl font-black bg-transparent text-emerald-400 focus:outline-none"
+                  />
+                  <span className="text-slate-500 font-medium text-lg self-end pb-1">s</span>
+                </div>
+              </div>
+
             </div>
 
-            <!-- Profile & Export Section -->
-            <div class="bg-slate-800 rounded-2xl p-5 border border-slate-700 shadow-xl">
-                <!-- Elevation Chart -->
-                <div class="mb-5">
-                    <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center">
-                        <i class="fa-solid fa-chart-area mr-1.5 text-emerald-400"></i> Profil d'Altimétrie
-                    </h3>
-                    <div class="h-28 w-full bg-slate-900/50 rounded-xl p-2 border border-slate-700/50">
-                        <canvas id="elevationChart"></canvas>
+            {/* Slider Control */}
+            <div className="mt-8 pt-6 border-t border-slate-800/80">
+              <div className="flex justify-between items-center text-xs font-medium text-slate-400 mb-2">
+                <span>Régler la vitesse interactivement :</span>
+                <span className="text-orange-400 font-bold">{speedKmh.toFixed(1)} km/h</span>
+              </div>
+              <input
+                type="range"
+                min="5.0"
+                max="25.0"
+                step="0.1"
+                value={speedKmh}
+                onChange={(e) => setSpeedKmh(parseFloat(e.target.value))}
+                className="w-full h-3 bg-slate-950 rounded-lg appearance-none cursor-pointer accent-orange-500 focus:outline-none"
+              />
+              <div className="flex justify-between text-[11px] text-slate-600 mt-1 font-mono">
+                <span>5 km/h (12:00/km)</span>
+                <span>10 km/h (6:00/km)</span>
+                <span>15 km/h (4:00/km)</span>
+                <span>20 km/h (3:00/km)</span>
+                <span>25 km/h (2:24/km)</span>
+              </div>
+            </div>
+
+          </div>
+
+          {/* Tab Navigation */}
+          <div className="flex justify-center mb-8 border-b border-slate-800 pb-2 gap-2 sm:gap-4">
+            <button
+              onClick={() => setActiveTab('converter')}
+              className={`px-4 py-2.5 rounded-xl font-semibold text-xs sm:text-sm transition flex items-center gap-2 ${
+                activeTab === 'converter'
+                  ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              }`}
+            >
+              <i className="fa-solid fa-calculator"></i>
+              Temps par Course
+            </button>
+            <button
+              onClick={() => setActiveTab('splits')}
+              className={`px-4 py-2.5 rounded-xl font-semibold text-xs sm:text-sm transition flex items-center gap-2 ${
+                activeTab === 'splits'
+                  ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              }`}
+            >
+              <i className="fa-solid fa-list-ol"></i>
+              Passages au Semi & Splits
+            </button>
+            <button
+              onClick={() => setActiveTab('zones')}
+              className={`px-4 py-2.5 rounded-xl font-semibold text-xs sm:text-sm transition flex items-center gap-2 ${
+                activeTab === 'zones'
+                  ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
+              }`}
+            >
+              <i className="fa-solid fa-gauge-high"></i>
+              Zones d'Entraînement
+            </button>
+          </div>
+
+          {/* TAB 1: Race Estimates (with Highlighted Semi-Marathon) */}
+          {activeTab === 'converter' && (
+            <div className="space-y-6">
+              
+              {/* Special Highlight Banner for Semi-Marathon */}
+              {(() => {
+                const semiSec = paceSecondsPerKm * 21.0975;
+                const hrs = Math.floor(semiSec / 3600);
+                const mins = Math.floor((semiSec % 3600) / 60);
+                const secs = Math.floor(semiSec % 60);
+
+                return (
+                  <div className="bg-gradient-to-r from-orange-600 to-amber-600 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 border border-orange-400/30">
+                    <div className="space-y-2 text-center md:text-left z-10">
+                      <div className="inline-flex items-center gap-2 bg-black/20 backdrop-blur-md px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider text-amber-200">
+                        <i className="fa-solid fa-star"></i> Objectif phare
+                      </div>
+                      <h2 className="text-2xl sm:text-3xl font-black">
+                        Temps estimé au Semi-Marathon
+                      </h2>
+                      <p className="text-orange-100 text-sm max-w-lg">
+                        Distance officielle : <strong>21,0975 km</strong> à une vitesse constante de <strong>{speedKmh.toFixed(1)} km/h</strong> ({currentPaceMins}:{String(currentPaceSecs).padStart(2, '0')} min/km).
+                      </p>
                     </div>
-                </div>
 
-                <!-- Export Options -->
-                <div>
-                    <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
-                        Exporter le parcours sélectionné
-                    </h3>
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <!-- Direct GPX Download -->
-                        <button id="btn-gpx" onclick="exportGPX()" disabled class="disabled:opacity-40 disabled:cursor-not-allowed bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2.5 px-3 rounded-xl transition flex items-center justify-center gap-2 text-sm shadow">
-                            <i class="fa-solid fa-file-arrow-down"></i> Télécharger GPX
-                        </button>
-
-                        <!-- Strava Export -->
-                        <button id="btn-strava" onclick="exportToStrava()" disabled class="disabled:opacity-40 disabled:cursor-not-allowed bg-[#FC4C02] hover:bg-[#e04300] text-white font-medium py-2.5 px-3 rounded-xl transition flex items-center justify-center gap-2 text-sm shadow">
-                            <i class="fa-brands fa-strava"></i> Ouvrir sur Strava
-                        </button>
-
-                        <!-- Garmin Connect Export -->
-                        <button id="btn-garmin" onclick="exportToGarmin()" disabled class="disabled:opacity-40 disabled:cursor-not-allowed bg-[#007CC3] hover:bg-[#0069a5] text-white font-medium py-2.5 px-3 rounded-xl transition flex items-center justify-center gap-2 text-sm shadow">
-                            <i class="fa-solid fa-triangle-circle-square"></i> Garmin Connect
-                        </button>
+                    <div className="bg-slate-950/90 backdrop-blur-md border border-orange-400/40 rounded-2xl p-5 text-center min-w-[240px] z-10 shadow-2xl">
+                      <span className="block text-xs uppercase tracking-widest text-slate-400 font-semibold mb-1">
+                        Chrono Semi-Marathon
+                      </span>
+                      <div className="text-3xl sm:text-4xl font-black text-amber-400 font-mono">
+                        {hrs > 0 && <span>{hrs}<span className="text-lg text-slate-400">h </span></span>}
+                        <span>{String(mins).padStart(2, '0')}<span className="text-lg text-slate-400">m </span></span>
+                        <span>{String(secs).padStart(2, '0')}<span className="text-lg text-slate-400">s</span></span>
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-2">
+                        Passage au 10k : <strong className="text-slate-200"><FormatTime totalSeconds={paceSecondsPerKm * 10} /></strong>
+                      </div>
                     </div>
-                </div>
-            </div>
-
-        </div>
-
-    </main>
-
-    <!-- Custom Modal Notification -->
-    <div id="modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center hidden p-4">
-        <div class="bg-slate-800 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
-            <h3 id="modal-title" class="text-lg font-bold text-white mb-2">Notice</h3>
-            <p id="modal-body" class="text-sm text-slate-300 mb-6"></p>
-            <div class="flex justify-end gap-2">
-                <button onclick="closeModal()" class="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-4 py-2 rounded-xl text-sm">
-                    Compris
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Application Script Logic -->
-    <script>
-        // Global App State
-        let map;
-        let userLocation = [48.8566, 2.3522]; // Paris default coordinates
-        let startMarker = null;
-        let generatedRoutes = [];
-        let selectedRoute = null;
-        let mapLayers = [];
-        let elevationChart = null;
-
-        // Route Theme Templates
-        const routeThemes = [
-            { name: "La Classique des Vallées", type: "Equilibré", color: "#10b981", elevationMult: 10, icon: "fa-mountain-sun" },
-            { name: "Boucle de Vélocité (Plat)", type: "Rapide", color: "#3b82f6", elevationMult: 4, icon: "fa-bolt" },
-            { name: "Défi Grimpette & Cols", type: "Moyenne Montagne", color: "#ef4444", elevationMult: 18, icon: "fa-volcano" },
-            { name: "Le Circuit Panoramique", type: "Pittoresque", color: "#f59e0b", elevationMult: 8, icon: "fa-camera" },
-            { name: "L'Aventure Gravel & Calme", type: "Tranquille", color: "#8b5cf6", elevationMult: 12, icon: "fa-tree" }
-        ];
-
-        // Initialize Map & Chart on DOM Ready
-        window.onload = function() {
-            initMap();
-            initChart();
-        };
-
-        function initMap() {
-            map = L.map('map').setView(userLocation, 11);
-            
-            // Dark Mode Tile Layer (CartoDB Dark Matter)
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
-                maxZoom: 19
-            }).addTo(map);
-
-            // User Location Marker
-            updateStartMarker("Paris");
-
-            // Allow selecting start location by clicking on map
-            map.on('click', function(e) {
-                const lat = e.latlng.lat;
-                const lng = e.latlng.lng;
-                setStartLocation(lat, lng, `Point sur carte (${lat.toFixed(3)}, ${lng.toFixed(3)})`);
-            });
-        }
-
-        function updateStartMarker(label = "Point de Départ") {
-            if (startMarker) {
-                map.removeLayer(startMarker);
-            }
-            startMarker = L.circleMarker(userLocation, {
-                radius: 8,
-                fillColor: "#10b981",
-                color: "#ffffff",
-                weight: 2,
-                opacity: 1,
-                fillOpacity: 0.9
-            }).addTo(map).bindPopup(`<b>Point de Départ :</b><br>${label}`).openPopup();
-        }
-
-        function setStartLocation(lat, lng, label) {
-            userLocation = [lat, lng];
-            map.setView(userLocation, 12);
-            updateStartMarker(label);
-            document.getElementById('start-location-label').innerText = `Départ : ${label}`;
-            if (generatedRoutes.length > 0) {
-                generateRoutes();
-            }
-        }
-
-        async function searchStartLocation() {
-            const query = document.getElementById('start-address').value.trim();
-            if (!query) {
-                showModal("Recherche", "Veuillez saisir le nom d'une ville, un code postal ou une adresse.");
-                return;
-            }
-
-            try {
-                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
-                const data = await response.json();
-
-                if (data && data.length > 0) {
-                    const place = data[0];
-                    const lat = parseFloat(place.lat);
-                    const lon = parseFloat(place.lon);
-                    const displayName = place.display_name.split(',')[0] || query;
-                    setStartLocation(lat, lon, displayName);
-                } else {
-                    showModal("Aucun résultat", "Impossible de trouver ce lieu. Veuillez essayer avec un autre nom ou un code postal.");
-                }
-            } catch (err) {
-                showModal("Erreur de recherche", "Erreur lors de la recherche de l'adresse. Vérifiez votre connexion internet.");
-            }
-        }
-
-        function getCurrentLocation() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(
-                    (position) => {
-                        const lat = position.coords.latitude;
-                        const lng = position.coords.longitude;
-                        setStartLocation(lat, lng, "Ma Position GPS");
-                        showModal("Géolocalisation réussie", "Votre position actuelle a été définie comme point de départ.");
-                    },
-                    () => {
-                        showModal("Géolocalisation", "Impossible d'accéder à votre position GPS.");
-                    }
+                  </div>
                 );
-            } else {
-                showModal("Erreur", "La géolocalisation n'est pas supportée par votre navigateur.");
-            }
-        }
+              })()}
 
-        // Generate 5 Distinct Routes based on Target Distance
-        function generateRoutes() {
-            const targetDistance = parseFloat(document.getElementById('distance').value);
-            const surfaceType = document.getElementById('surface-type').value;
+              {/* All Distances Cards Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {DISTANCES.map((dist) => {
+                  const totalSec = paceSecondsPerKm * dist.km;
+                  const isSemi = dist.id === 'semi';
 
-            generatedRoutes = [];
-            clearMapLayers();
-
-            // Generate 5 loops with different headings and characteristics
-            for (let i = 0; i < 5; i++) {
-                const theme = routeThemes[i];
-                const headingAngle = (i * 72) * (Math.PI / 180); // 360 / 5 = 72 degrees offset
-                
-                // Slight variations in distance (+/- 8%)
-                const actualDistance = targetDistance * (0.94 + Math.random() * 0.12);
-                const elevationGain = Math.round(actualDistance * theme.elevationMult);
-                
-                // Create geometry points
-                const pathCoords = generateLoopCoordinates(userLocation, actualDistance, headingAngle);
-                const elevationProfile = generateElevationProfile(actualDistance, elevationGain);
-
-                const route = {
-                    id: i + 1,
-                    name: theme.name,
-                    type: theme.type,
-                    surface: surfaceType === 'road' ? 'Asphalte' : 'Gravel / Mixte',
-                    distance: actualDistance.toFixed(1),
-                    elevationGain: elevationGain,
-                    estimatedTime: calculateTime(actualDistance, elevationGain),
-                    color: theme.color,
-                    icon: theme.icon,
-                    coordinates: pathCoords,
-                    elevationProfile: elevationProfile
-                };
-
-                generatedRoutes.push(route);
-            }
-
-            renderRouteCards();
-            selectRoute(1); // Select first route by default
-        }
-
-        // Mathematical helper to construct a loop geometry around origin
-        function generateLoopCoordinates(startPoint, distanceKm, angleOffset) {
-            const points = [];
-            const numPoints = 25; // Smooth loop
-            
-            // Calculate loop radius based on target perimeter
-            // Perimeter approx 2 * pi * r => r approx distanceKm / (2 * pi)
-            const radiusKm = distanceKm / 5.5; 
-            
-            // Convert radius to approx lat/lng offset (~111km per degree lat)
-            const latRadius = radiusKm / 111;
-            const lngRadius = radiusKm / (111 * Math.cos(startPoint[0] * Math.PI / 180));
-
-            // Center of the loop (offset from start point so start point is on the loop)
-            const centerLat = startPoint[0] + latRadius * Math.cos(angleOffset);
-            const centerLng = startPoint[1] + lngRadius * Math.sin(angleOffset);
-
-            for (let i = 0; i <= numPoints; i++) {
-                const angle = (i / numPoints) * 2 * Math.PI;
-                
-                // Add slight randomness for realistic curves
-                const noise = 1 + (Math.sin(i * 3) * 0.08); 
-                
-                const lat = centerLat - latRadius * Math.cos(angle + angleOffset) * noise;
-                const lng = centerLng - lngRadius * Math.sin(angle + angleOffset) * noise;
-                
-                points.push([lat, lng]);
-            }
-            
-            // Force start/end exact match
-            points[0] = [startPoint[0], startPoint[1]];
-            points[points.length - 1] = [startPoint[0], startPoint[1]];
-
-            return points;
-        }
-
-        function generateElevationProfile(distance, totalGain) {
-            const dataPoints = 20;
-            const profile = [];
-            let currentAlt = 120 + Math.random() * 50;
-
-            for (let i = 0; i < dataPoints; i++) {
-                profile.push(Math.round(currentAlt));
-                const delta = (Math.sin(i) * (totalGain / 10)) + (Math.random() * 15 - 5);
-                currentAlt = Math.max(50, currentAlt + delta);
-            }
-            return profile;
-        }
-
-        function calculateTime(distance, elevation) {
-            // Average speed ~24km/h on flat + 1h per 1000m elevation
-            const hours = (distance / 24) + (elevation / 1000);
-            const h = Math.floor(hours);
-            const m = Math.round((hours - h) * 60);
-            return `${h}h${m < 10 ? '0' : ''}${m}`;
-        }
-
-        function renderRouteCards() {
-            const container = document.getElementById('routes-container');
-            document.getElementById('route-count').innerText = `${generatedRoutes.length}/5`;
-            container.innerHTML = '';
-
-            generatedRoutes.forEach((route) => {
-                const card = document.createElement('div');
-                card.id = `route-card-${route.id}`;
-                card.onclick = () => selectRoute(route.id);
-                card.className = `p-4 rounded-xl border transition cursor-pointer flex flex-col justify-between space-y-3 bg-slate-800/80 hover:bg-slate-700/80 border-slate-700`;
-
-                card.innerHTML = `
-                    <div class="flex justify-between items-start">
-                        <div class="flex items-center gap-2.5">
-                            <div class="w-8 h-8 rounded-lg flex items-center justify-center text-white" style="background-color: ${route.color}">
-                                <i class="fa-solid ${route.icon} text-sm"></i>
-                            </div>
-                            <div>
-                                <h3 class="font-semibold text-white text-sm leading-tight">${route.name}</h3>
-                                <span class="text-xs text-slate-400">${route.type} • ${route.surface}</span>
-                            </div>
+                  return (
+                    <div
+                      key={dist.id}
+                      className={`bg-slate-900 border rounded-2xl p-5 transition-all flex flex-col justify-between ${
+                        isSemi
+                          ? 'border-orange-500/60 bg-gradient-to-b from-slate-900 to-orange-950/20 shadow-lg shadow-orange-500/10'
+                          : 'border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm ${
+                            isSemi ? 'bg-orange-500 text-white' : 'bg-slate-800 text-slate-300'
+                          }`}>
+                            <i className={`fa-solid ${dist.icon}`}></i>
+                          </div>
+                          <div>
+                            <h3 className="font-bold text-slate-100 flex items-center gap-2">
+                              {dist.name}
+                              {isSemi && <span className="bg-orange-500/20 text-orange-400 text-[10px] px-2 py-0.5 rounded-full uppercase font-bold">Incontournable</span>}
+                            </h3>
+                            <span className="text-xs text-slate-500">{dist.km} km</span>
+                          </div>
                         </div>
-                        <span class="text-xs font-bold text-slate-300 bg-slate-900/60 border border-slate-700 px-2 py-1 rounded-md">
-                            #${route.id}
-                        </span>
+                      </div>
+
+                      <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 text-right mt-2">
+                        <span className="block text-[10px] uppercase text-slate-500 font-semibold mb-0.5">Temps estimé</span>
+                        <div className="text-slate-100">
+                          <FormatTime totalSeconds={totalSec} showSubSec={dist.km < 1} />
+                        </div>
+                      </div>
                     </div>
+                  );
+                })}
 
-                    <div class="grid grid-cols-3 gap-2 pt-1 border-t border-slate-700/50 text-center">
-                        <div>
-                            <span class="block text-[10px] text-slate-400 uppercase">Distance</span>
-                            <span class="text-sm font-bold text-emerald-400">${route.distance} km</span>
-                        </div>
-                        <div>
-                            <span class="block text-[10px] text-slate-400 uppercase">Dénivelé</span>
-                            <span class="text-sm font-bold text-slate-200">+${route.elevationGain}m</span>
-                        </div>
-                        <div>
-                            <span class="block text-[10px] text-slate-400 uppercase">Durée est.</span>
-                            <span class="text-sm font-bold text-slate-200">${route.estimatedTime}</span>
-                        </div>
+                {/* Custom Distance Card */}
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-slate-800 text-slate-300 flex items-center justify-center">
+                        <i className="fa-solid fa-sliders"></i>
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-100">Distance Perso</h3>
+                        <span className="text-xs text-slate-500">Choix libre</span>
+                      </div>
                     </div>
-                `;
-                container.appendChild(card);
-            });
-        }
+                    <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1">
+                      <input
+                        type="number"
+                        min="0.1"
+                        max="200"
+                        step="0.5"
+                        value={customDist}
+                        onChange={(e) => setCustomDist(Math.max(0.1, parseFloat(e.target.value) || 1))}
+                        className="w-12 text-center text-sm font-bold bg-transparent text-orange-400 focus:outline-none"
+                      />
+                      <span className="text-xs text-slate-500">km</span>
+                    </div>
+                  </div>
 
-        function selectRoute(routeId) {
-            selectedRoute = generatedRoutes.find(r => r.id === routeId);
-            if (!selectedRoute) return;
+                  <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3 text-right mt-2">
+                    <span className="block text-[10px] uppercase text-slate-500 font-semibold mb-0.5">Temps estimé ({customDist} km)</span>
+                    <div className="text-slate-100">
+                      <FormatTime totalSeconds={paceSecondsPerKm * (parseFloat(customDist) || 10)} />
+                    </div>
+                  </div>
+                </div>
 
-            // Highlight UI Card
-            generatedRoutes.forEach(r => {
-                const card = document.getElementById(`route-card-${r.id}`);
-                if (card) {
-                    if (r.id === routeId) {
-                        card.className = "p-4 rounded-xl border-2 transition cursor-pointer flex flex-col justify-between space-y-3 bg-slate-700/90 border-emerald-500 shadow-lg";
-                    } else {
-                        card.className = "p-4 rounded-xl border transition cursor-pointer flex flex-col justify-between space-y-3 bg-slate-800/80 hover:bg-slate-700/50 border-slate-700 opacity-70";
-                    }
-                }
-            });
+              </div>
 
-            // Update map
-            clearMapLayers();
-            
-            // Draw route polyline
-            const polyline = L.polyline(selectedRoute.coordinates, {
-                color: selectedRoute.color,
-                weight: 5,
-                opacity: 0.9,
-                lineJoin: 'round'
-            }).addTo(map);
+            </div>
+          )}
 
-            mapLayers.push(polyline);
-            map.fitBounds(polyline.getBounds(), { padding: [40, 40] });
+          {/* TAB 2: Split Times Matrix (Tableau des Passages) */}
+          {activeTab === 'splits' && (
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8">
+              
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 pb-6 border-b border-slate-800">
+                <div>
+                  <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                    <i className="fa-solid fa-list-ol text-orange-500"></i>
+                    Tableau des Temps de Passage (Splits)
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Visualisez vos temps à chaque kilomètre à l'allure constante de <strong>{currentPaceMins}:{String(currentPaceSecs).padStart(2, '0')}/km</strong> ({speedKmh.toFixed(1)} km/h).
+                  </p>
+                </div>
 
-            // Update Header Name
-            document.getElementById('selected-route-name').innerText = `${selectedRoute.name} (${selectedRoute.distance} km)`;
+                {/* Select Split Focus */}
+                <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 p-1 rounded-xl">
+                  <button
+                    onClick={() => setSplitDistance('10k')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                      splitDistance === '10k' ? 'bg-orange-500 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    10k
+                  </button>
+                  <button
+                    onClick={() => setSplitDistance('semi')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                      splitDistance === 'semi' ? 'bg-orange-500 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Semi-Marathon
+                  </button>
+                  <button
+                    onClick={() => setSplitDistance('marathon')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                      splitDistance === 'marathon' ? 'bg-orange-500 text-white' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Marathon
+                  </button>
+                </div>
+              </div>
 
-            // Update Chart
-            updateElevationChart(selectedRoute.elevationProfile);
+              {/* Splits Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-xs text-slate-400 uppercase tracking-wider">
+                      <th className="py-3 px-4">Distance</th>
+                      <th className="py-3 px-4">Repère</th>
+                      <th className="py-3 px-4">Temps Cumulé</th>
+                      <th className="py-3 px-4 text-right">Allure Moyenne</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/50">
+                    {(() => {
+                      const target = getSplitTarget();
+                      const totalKm = target.km;
+                      const rows = [];
+                      
+                      let current = 1;
+                      const keyPoints = [5, 10, 15, 20, 21.0975, 25, 30, 35, 40, 42.195];
 
-            // Enable Export Buttons
-            document.getElementById('btn-gpx').disabled = false;
-            document.getElementById('btn-strava').disabled = false;
-            document.getElementById('btn-garmin').disabled = false;
-        }
+                      for (let k = 1; k <= Math.ceil(totalKm); k++) {
+                        const prevKm = k - 1;
+                        keyPoints.forEach(kp => {
+                          if (kp > prevKm && kp < k && kp <= totalKm) {
+                            rows.push({ km: kp, isKey: true });
+                          }
+                        });
 
-        function clearMapLayers() {
-            mapLayers.forEach(layer => map.removeLayer(layer));
-            mapLayers = [];
-        }
+                        if (k <= totalKm) {
+                          rows.push({ km: k, isKey: k % 5 === 0 });
+                        } else if (totalKm % 1 !== 0) {
+                          rows.push({ km: totalKm, isKey: true });
+                        }
+                      }
 
-        function updateElevationChart(data) {
-            if (!elevationChart) return;
-            const labels = data.map((_, index) => `${Math.round((index / (data.length - 1)) * selectedRoute.distance)} km`);
-            
-            elevationChart.data.labels = labels;
-            elevationChart.data.datasets[0].data = data;
-            elevationChart.data.datasets[0].borderColor = selectedRoute.color;
-            elevationChart.update();
-        }
+                      return rows.map((row, idx) => {
+                        const seconds = paceSecondsPerKm * row.km;
+                        const isFinal = Math.abs(row.km - totalKm) < 0.001;
 
-        // ================= EXPORT LOGIC ================= //
+                        return (
+                          <tr
+                            key={idx}
+                            className={`hover:bg-slate-800/40 transition ${
+                              isFinal
+                                ? 'bg-orange-500/20 text-orange-200 font-bold'
+                                : row.isKey
+                                ? 'bg-slate-800/20 font-semibold text-slate-200'
+                                : 'text-slate-400'
+                            }`}
+                          >
+                            <td className="py-3 px-4 flex items-center gap-2">
+                              {isFinal ? (
+                                <i className="fa-solid fa-flag-checkered text-orange-400"></i>
+                              ) : row.isKey ? (
+                                <i className="fa-solid fa-location-dot text-amber-400 text-xs"></i>
+                              ) : (
+                                <span className="w-2 h-2 rounded-full bg-slate-700 inline-block"></span>
+                              )}
+                              <span>{row.km.toLocaleString('fr-FR', { maximumFractionDigits: 4 })} km</span>
+                            </td>
+                            <td className="py-3 px-4 text-xs text-slate-500">
+                              {isFinal ? 'ARRIVÉE' : row.km === 21.0975 ? 'SEMI-MARATHON' : row.km % 5 === 0 ? `Km ${row.km}` : '-'}
+                            </td>
+                            <td className="py-3 px-4 font-mono text-slate-100">
+                              <FormatTime totalSeconds={seconds} />
+                            </td>
+                            <td className="py-3 px-4 text-right font-mono text-xs text-slate-400">
+                              {currentPaceMins}:{String(currentPaceSecs).padStart(2, '0')} /km
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
 
-        function exportGPX() {
-            if (!selectedRoute) return;
+            </div>
+          )}
 
-            // Construct GPX XML file content
-            let gpxContent = `<?xml version="1.0" encoding="UTF-8"?>
-<gpx version="1.1" creator="VéloRoute Pro - https://veloroute.app" xmlns="http://www.topografix.com/GPX/1/1">
-  <metadata>
-    <name>${escapeXml(selectedRoute.name)}</name>
-    <desc>Itinéraire de ${selectedRoute.distance} km généré sur VéloRoute Pro</desc>
-  </metadata>
-  <trk>
-    <name>${escapeXml(selectedRoute.name)}</name>
-    <type>Cycling</type>
-    <trkseg>
-`;
+          {/* TAB 3: Training Zones */}
+          {activeTab === 'zones' && (
+            <div className="space-y-6">
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8">
+                <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+                  <i className="fa-solid fa-gauge-high text-orange-500"></i>
+                  Zones d'Entraînement Estimées (VMA & Allures)
+                </h2>
+                <p className="text-xs text-slate-400 mb-6">
+                  Si l'allure sélectionnée (<strong>{speedKmh.toFixed(1)} km/h</strong>) correspond à votre allure cible de compétition, voici les équivalents d'entraînement recommandés :
+                </p>
 
-            selectedRoute.coordinates.forEach((pt, idx) => {
-                const ele = selectedRoute.elevationProfile[Math.floor((idx / selectedRoute.coordinates.length) * selectedRoute.elevationProfile.length)] || 100;
-                gpxContent += `      <trkpt lat="${pt[0]}" lon="${pt[1]}"><ele>${ele}</ele></trkpt>\n`;
-            });
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  
+                  {/* EF */}
+                  <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full">
+                        Endurance Fondamentale (EF)
+                      </span>
+                      <span className="text-xs text-slate-500">65-75% VMA</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mb-3">Aisance respiratoire totale, idéale pour 80% de vos sorties.</p>
+                    <div className="flex justify-between items-baseline font-mono text-slate-200 text-sm">
+                      <span>Vitesse : <strong>{(speedKmh * 0.70).toFixed(1)} - {(speedKmh * 0.75).toFixed(1)} km/h</strong></span>
+                    </div>
+                  </div>
 
-            gpxContent += `    </trkseg>\n  </trk>\n</gpx>`;
+                  {/* Allure Specific Semi */}
+                  <div className="bg-slate-950 border border-orange-500/40 rounded-2xl p-5 bg-gradient-to-br from-slate-950 to-orange-950/20">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-orange-400 bg-orange-500/10 px-2.5 py-1 rounded-full">
+                        Allure Spécifique Semi
+                      </span>
+                      <span className="text-xs text-orange-300 font-semibold">85% VMA</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mb-3">Allure cible maintenable sur 21 km avec une bonne préparation.</p>
+                    <div className="flex justify-between items-baseline font-mono text-orange-300 text-sm font-bold">
+                      <span>Vitesse : {speedKmh.toFixed(1)} km/h</span>
+                      <span>Allure : {currentPaceMins}:{String(currentPaceSecs).padStart(2, '0')}/km</span>
+                    </div>
+                  </div>
 
-            // Trigger Browser Download using Blob
-            const blob = new Blob([gpxContent], { type: 'application/gpx+xml' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `${selectedRoute.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${selectedRoute.distance}km.gpx`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+                  {/* Seuil Anaérobie */}
+                  <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full">
+                        Seuil Anaérobie (Allure 10k)
+                      </span>
+                      <span className="text-[11px] text-slate-500">88-92% VMA</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mb-3">Sensation d'effort soutenu ("inconfort confortable").</p>
+                    <div className="flex justify-between items-baseline font-mono text-slate-200 text-sm">
+                      <span>Vitesse : <strong>{(speedKmh * 1.06).toFixed(1)} km/h</strong></span>
+                    </div>
+                  </div>
 
-            showModal("Export GPX Réussi", "Le fichier .GPX a été téléchargé dans votre navigateur. Vous pouvez maintenant l'importer dans votre compteur GPS.");
-        }
+                  {/* VMA */}
+                  <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-rose-400 bg-rose-500/10 px-2.5 py-1 rounded-full">
+                        VMA / Vitesse Maximale
+                      </span>
+                      <span className="text-[11px] text-slate-500">100% VMA</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mb-3">Fractionné court / moyen (ex: 30/30, 400m).</p>
+                    <div className="flex justify-between items-baseline font-mono text-slate-200 text-sm">
+                      <span>VMA estimée : <strong>{(speedKmh / 0.85).toFixed(1)} km/h</strong></span>
+                    </div>
+                  </div>
 
-        function exportToStrava() {
-            if (!selectedRoute) return;
-            // Direct user to Strava Route Builder / Upload page with instructions
-            const stravaUrl = "https://www.strava.com/routes/new";
-            showModal(
-                "Export vers Strava",
-                `Pour enregistrer cet itinéraire sur Strava :<br><br>
-                1. Téléchargez d'abord le fichier <b>GPX</b> via le bouton "Télécharger GPX".<br>
-                2. Cliquez sur continuer pour ouvrir le créateur d'itinéraires Strava.<br>
-                3. Cliquez sur l'icône de téléchargement dans Strava pour charger le fichier GPX.`,
-                () => window.open(stravaUrl, '_blank')
-            );
-        }
+                </div>
+              </div>
+            </div>
+          )}
 
-        function exportToGarmin() {
-            if (!selectedRoute) return;
-            // Direct user to Garmin Connect Courses import
-            const garminUrl = "https://connect.garmin.com/modern/courses";
-            showModal(
-                "Export vers Garmin Connect",
-                `Pour envoyer ce parcours sur votre montre ou compteur Garmin :<br><br>
-                1. Téléchargez d'abord le fichier <b>GPX</b>.<br>
-                2. Rendez-vous sur Garmin Connect (Lien ci-dessous).<br>
-                3. Allez dans <b>Entraînement & Navigation &gt; Parcours</b> et sélectionnez <b>Importer</b>.`,
-                () => window.open(garminUrl, '_blank')
-            );
-        }
+          {/* Footer */}
+          <footer className="mt-12 text-center text-xs text-slate-500 border-t border-slate-900 pt-6">
+            <p>© Calculateur d'Allures & Temps de Passage pour Course à Pied</p>
+          </footer>
 
-        // Modal Helpers
-        function showModal(title, text, onConfirm = null) {
-            document.getElementById('modal-title').innerText = title;
-            document.getElementById('modal-body').innerHTML = text;
-            const modal = document.getElementById('modal');
-            modal.classList.remove('hidden');
-            
-            if (onConfirm) {
-                window.pendingModalConfirm = onConfirm;
-            } else {
-                window.pendingModalConfirm = null;
-            }
-        }
+        </div>
+      );
+    }
 
-        function closeModal() {
-            document.getElementById('modal').classList.add('hidden');
-            if (window.pendingModalConfirm) {
-                window.pendingModalConfirm();
-                window.pendingModalConfirm = null;
-            }
-        }
-
-        function escapeXml(unsafe) {
-            return unsafe.replace(/[<>&'"]/g, function (c) {
-                switch (c) {
-                    case '<': return '&lt;';
-                    case '>': return '&gt;';
-                    case '&': return '&amp;';
-                    case '\'': return '&apos;';
-                    case '"': return '&quot;';
-                }
-            });
-        }
-    </script>
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
 </body>
 </html>
